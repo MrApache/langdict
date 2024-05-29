@@ -41,6 +41,7 @@ int main() {
     init_input();
     init_border();
     init_gui();
+
     loop();
 
     endwin();

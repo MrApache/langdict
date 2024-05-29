@@ -1,14 +1,14 @@
 cmake_minimum_required(VERSION 3.27)
-project(langDict C)
+project(langdict C)
 
 set(CMAKE_C_STANDARD 11)
 set(CURSES_USE_NCURSES TRUE)
 set(CURSES_NEED_WIDE TRUE)
 set(ENV{TERM} "xterm-256color")
 
-include_directories("global/")
+include_directories("global/" "gui/types")
 
-add_executable(langDict main.c
+add_executable(langdict main.c
         global/collections/dictionary.h
         gui/gui.c
         gui/include/gui.h
@@ -36,7 +36,14 @@ add_executable(langDict main.c
         gui/types/interact.h
         gui/types/point.h
         gui/point.c
-        gui/interaction/text_box.c
-        gui/types/visual.h)
+        gui/types/interaction/text_box.c
+        gui/types/visual.h
+        gui/types/interact.c
+        gui/types/interaction/text_box.h
+        gui/types/visual.c
+        gui/types/interaction/button.c
+        gui/types/interaction/button.h
+        modes/text_input.c
+        modes/text_input.h)
 
 target_link_libraries(${PROJECT_NAME} ncurses)

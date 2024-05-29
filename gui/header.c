@@ -17,11 +17,11 @@ void draw_menu_path(void)
 
     for (i = 0; i < menu_stack->count; i++) {
         menu = stack_menu_element_at(menu_stack, i);
-        print(A_BOLD, menu->name, line_y, line_cursor);
+        print(A_BOLD, menu->name, point(line_y, line_cursor));
         name_size = (int)strlen(menu->name);
         line_cursor += name_size;
 
         if(i + 1 < menu_stack->count)
-            print(A_BOLD, ">", line_y, line_cursor++);
+            print(A_BOLD, ">", point(line_y, line_cursor++));
     }
 }

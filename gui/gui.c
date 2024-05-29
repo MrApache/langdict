@@ -6,10 +6,11 @@
 #include "../include/input.h"
 #include "collections/dynarr.h"
 #include "include/border.h"
+#include "interaction/button.h"
 
 #define BACK_OPT "Back"
-DYNARR_HEADER(opt, Option *)
-DYNARR(opt, Option *)
+DYNARR_HEADER(vis, visual *)
+DYNARR(vis, visual *)
 
 WINDOW *main_win;
 stack_menu *menu_stack;
@@ -17,8 +18,15 @@ stack_menu *menu_stack;
 static Menu *active_menu;
 
 static int selection_index;
-static Option *back_opt;
-static opt_dynarr *options;
+static button *back_opt;
+static vis_dynarr *visuals;
+
+point get_cursor(void)
+{
+    int y = getcury(main_win);
+    int x = getcurx(main_win);
+    return point(y, x);
+}
 
 void gui_clear(void)
 {
@@ -27,10 +35,10 @@ void gui_clear(void)
     wrefresh(main_win);
 }
 
-void print(int attrb, string str, int y, int x)
+void print(int attrb, string str, point pos)
 {
     wattron(main_win, attrb);
-    mvwprintw(main_win, y, x, "%s", str);
+    mvwprintw(main_win, pos.y, pos.x, "%s", str);
     wattroff(main_win, attrb);
     wrefresh(main_win);
 }
@@ -45,19 +53,41 @@ void clear_line(int y, int x)
 
 void draw_active_menu(void)
 {
-    Option *opt;
+    draw_data draw;
+    visual *vis;
     int i;
 
     for (i = 0; i < active_menu->opt_count; ++i) {
-        opt = active_menu->options[i];
-        mvwaddstr(main_win, opt->y, opt->x, opt->name);
+        vis = active_menu->options[i];
+        draw = vis->draw;
+        draw.func(print, draw.source);
     }
-/*
-    for (i = 0; i < options->count; ++i) {
-        opt = options->array[i];
-        mvwaddstr(main_win, opt->y, opt->x, opt->name);
+
+    if(menu_stack->count <= 1)
+        return;
+
+    vis = back_opt->base;
+    draw = vis->draw;
+    draw.func(print, draw.source);
+}
+
+void set_active_menu(Menu *menu)
+{
+    visual *vis;
+    int i;
+
+    vis_dynarr_clear_arr(visuals);
+    stack_menu_push(menu_stack, menu);
+    active_menu = menu;
+
+    if(menu_stack->count > 1)
+        vis_dynarr_add_item(visuals, back_opt->base);
+
+    for (i = 0; i < active_menu->opt_count; ++i) {
+        vis = active_menu->options[i];
+        if(vis->interaction.interactable)
+            vis_dynarr_add_item(visuals, active_menu->options[i]);
     }
-*/
 }
 
 static void clamp(void)
@@ -65,36 +95,20 @@ static void clamp(void)
     if(selection_index < 0)
         selection_index = 0;
 
-    if(selection_index >= options->count)
-        selection_index = options->count - 1;
+    if(selection_index >= visuals->count)
+        selection_index = visuals->count - 1;
 }
 
-void set_active_menu(Menu *menu)
-{
-    Option *opt;
-    opt_dynarr_clear_arr(options);
-    stack_menu_push(menu_stack, menu);
-    active_menu = menu;
-    for (int i = 0; i < active_menu->opt_count; ++i) {
-        opt = active_menu->options[i];
-        if(opt->interactable)
-            opt_dynarr_add_item(options, active_menu->options[i]);
-    }
-
-    if(menu_stack->count > 1)
-        opt_dynarr_add_item(options, back_opt);
-}
-
-Menu *go_back(void)
+static void go_back(void)
 {
     stack_menu_pop(menu_stack); //ignore current menu
-    return stack_menu_pop(menu_stack); //return previous
+    set_active_menu(stack_menu_pop(menu_stack)); //return previous
 }
 
 void invoke(void)
 {
-    Option *option = options->array[selection_index];
-    set_active_menu(invoke_opt(option));
+    visual *vis = visuals->array[selection_index];
+    vis->interaction.callback();
     gui_clear();
 }
 
@@ -105,8 +119,24 @@ void update_gui(void)
 
 static void draw_selected_option(void)
 {
-    Option *option = options->array[selection_index];
-    print(A_STANDOUT, option->name, option->y, option->x);
+    const visual *vis;
+    int x_size, x;
+    interact in;
+    char ch;
+
+    vis = visuals->array[selection_index];
+    in = vis->interaction;
+    x_size = in.size.x;
+
+    char buff[x_size + 1];
+    buff[x_size] = NULL_CHR;
+
+    for (x = 0; x < x_size; ++x) {
+        ch = mvwinch(main_win, in.position.y, in.position.x + x) & A_CHARTEXT;
+        buff[x] = ch;
+    }
+
+    print(A_STANDOUT, buff, point(in.position.y, in.position.x));
 }
 
 void draw_gui(void)
@@ -120,18 +150,20 @@ static void create_back_option(void)
 {
     const int y = GUI_LINES - 2;
     const int x = GUI_COLS / 2 - strlen(BACK_OPT) / 2;
-    back_opt = create_option(BACK_OPT, y, x, (callback) go_back, true);
+    point pos = point(y, x);
+    point size = point(1, strlen(BACK_OPT));
+    back_opt = create_button(BACK_OPT, pos, size, go_back);
 }
 
 static void on_up(void)
 {
-    selection_index--;
+    selection_index++;
     clamp();
 }
 
 static void on_down(void)
 {
-    selection_index++;
+    selection_index--;
     clamp();
 }
 
@@ -153,7 +185,7 @@ void init_gui(void)
     wborder_set(main_win, &v_line, &v_line, &h_line, &h_line, &ul_corner, &ur_corner, &ll_corner, &lr_corner);
     wrefresh(main_win);
 
-    options = create_opt_dynarr();
+    visuals = create_vis_dynarr();
     create_back_option();
     menu_stack = create_stack_menu();
     set_active_menu(get_main_menu());
